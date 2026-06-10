@@ -1,0 +1,267 @@
+---
+name: antikode-lead-radar
+version: 1.3.0
+description: >
+  Generates a structured lead research report for Antikode's business
+  development team as a clean Markdown file. Trigger this skill when the
+  user says any of: "start the lead form", "generate leads", "run lead
+  radar", "find leads", "lead research", or "show me the form". Presents a
+  guided intake form (lead brief), researches real companies via web search,
+  then outputs a portable `.md` report with scores, client portfolio mapping,
+  competitor loyalty benchmarks, multi-PIC contacts, current promotion
+  schemes, source hyperlinks, and data verification flags.
+---
+
+# Antikode Lead Radar Skill — v1.3.0
+
+Generates a structured lead intelligence report for Antikode BD pitches, as a
+clean Markdown file. Always follow all steps in order. Never skip the intake form.
+
+---
+
+## Changelog — v1.3.0
+
+Changed from v1.2.0:
+- **Markdown output only** — report now exports as a single portable `.md` file. No HTML, no React, no Babel, no CDN, no build step. Opens in any editor, Obsidian, Lark Doc, GitHub, or pastes straight into a deck.
+- **Styling removed** — design token map, theme/accent/font/card-style options, score-ring colors, and the "quick re-style" flow are gone. Markdown carries no styling, so none is collected or applied.
+- **Intake form: 1 screen, 4 questions** — Lead Brief only (Q1–Q4 including Lead Count). No styling screen.
+- **All research depth retained from v1.2.0** — verification flags, client portfolio mapping, competitor loyalty schemes, multi-PIC contacts, promotion schemes, and source hyperlinks all carry over unchanged.
+
+> Carried over from v1.2.0: double-check & verify, 10+ client portfolio entries per lead, 3–5 competitors, 2–4 PICs, 2–3 promos, 4+ sources, every major claim backed by a source URL.
+
+---
+
+## Step 1 — Read the Credential Deck
+
+Before showing any form, check if the user has uploaded a PDF in the project or conversation.
+
+- If a PDF is present → read it using the pdf skill or bash to extract text
+- Extract: services offered, past clients, proof points, project types, notable case studies
+- Store these internally — you will use them to personalize each lead's `outreachStrategy` and `valueProp`
+- If no PDF is present → ask: *"Do you have a credential or pitch deck to upload? It helps personalize the outreach strategies. You can skip this and continue without it."*
+- If no PDF → default proof points: HokBen, Maybank, AXIS, Paragon Corp, Tzu Chi Hospital
+
+---
+
+## Step 2 — Show the Intake Form (1 screen only)
+
+Present ONE screen of questions using `AskUserQuestion`. Show all 4 questions in a single call — no second screen, no styling screen.
+
+### Screen 1 — Lead Brief (4 questions via AskUserQuestion)
+
+```
+Q1: Geography (single_select)
+Options: Indonesia, Singapore, Malaysia, Southeast Asia (all), Other
+
+Q2: Project types to pitch (multi_select)
+Options: New loyalty app (from scratch), Loyalty program revamp,
+         Gamification / campaign layer, Web & digital experience redesign
+
+Q3: Company size (single_select)
+Options: Enterprise (50+ outlets), Mid-market (10–50 outlets), Both
+
+Q4: How many leads? (single_select)
+Options: 5 leads (Recommended), 3 leads, 8 leads, 10 leads
+```
+
+> **PIC depth defaults to "Manager to VP level" — do not ask the user.**
+
+After Screen 1 is submitted, confirm the brief back to the user in one line before starting research.
+
+---
+
+## Step 3 — Research Leads
+
+After the user submits the form, run web searches to find real, named companies. For each lead, collect ALL of the following:
+
+### 3a — Company Basics
+- `company`, `website`, `industry`, `size` (outlet/branch count)
+- `score` (1–10), `scoreReason` (1 sentence), `fit` (2–3 sentences)
+- `verified` (true/false — based on whether key data was confirmed by a live source)
+
+### 3b — Client / Outlet Portfolio
+Search for the company's known client list (if B2B) or outlet locations / sub-brands (if B2C). Map **10+ entries minimum**, each with:
+```
+{ name: "Client or outlet name", loyaltyStatus: "No Loyalty" | "Lacking Loyalty" | "Full-scale Loyalty", provider: "optional — loyalty provider name if known" }
+```
+Loyalty status definitions:
+- **No Loyalty** — no known loyalty program whatsoever
+- **Lacking Loyalty** — has basic/outdated program (stamp card, simple points) with no engagement mechanics
+- **Full-scale Loyalty** — mature app or program with CRM, tiers, gamification; note the provider
+
+### 3c — Competitor Landscape
+Find 3–5 direct competitors. For each:
+```
+{ name, loyaltyStatus, scheme: "description of their loyalty approach", weakness: "where they fall short" }
+```
+This gives BD a benchmark and an opening for the pitch ("your competitor X already has Y — here's how to stay ahead").
+
+### 3d — Decision Maker PICs
+Find 2–4 real contacts at the target company, ranging from Manager to VP level. For each PIC:
+```
+{
+  name: "Full name if findable, or role-based title if not public",
+  title: "Job title",
+  gender: "M" | "F",
+  linkedinUrl: "https://www.linkedin.com/search/results/people/?keywords=[TITLE]+[COMPANY]",
+  approachAngle: "1 sentence on how to open the conversation with this specific person"
+}
+```
+- If real names are publicly findable (via LinkedIn search, company site, press releases) — use them
+- If not publicly available — use role-based names (e.g. "Marketing Manager (Naavagreen)") and flag that the LinkedIn URL is a search link
+- Always include the gender icon (♀/♂) in the rendered output
+
+### 3e — Current Promotion Schemes
+Find 2–3 active or recent promotions the company is running. For each:
+```
+{ type: "Promo name", description: "What it is and why it signals a gap", source: "https://..." }
+```
+These become conversation openers — e.g. "We noticed you're running a payday promo — here's how a gamification layer would make that 3x more effective."
+
+### 3f — Sources
+For every lead, collect a `sources` array of all URLs used:
+```
+sources: [{ label: "Short label", url: "https://..." }]
+```
+Minimum 4 sources per lead. Every major data point (outlet count, loyalty status, news event, PIC name) must have at least one corresponding source URL.
+
+### 3g — Scoring
+
+Base score 1–10, then apply modifiers:
+
+| Condition | Score range |
+|---|---|
+| No loyalty app + enterprise scale + expansion signal | 9–10 |
+| Has basic program but clear gap + good size fit | 7–8 |
+| Has program, less urgent but strategic fit | 5–6 |
+
+**Modifiers:**
+- **+1** if company's own clients/outlets have No Loyalty status (amplifies buying power signal)
+- **+1** if competitors have weak/no loyalty schemes (less switching friction)
+- **+1** if currently running generic promos only (signals they need a proper loyalty platform)
+- **−1** if they already have a full-scale mature gamification layer (lower urgency)
+
+---
+
+## Step 4 — Generate the Markdown Output
+
+Output a single `.md` file saved to `leads/antikode-leads-[geography]-[YYYY-MM].md` (create the `leads/` folder if it does not exist). The file is plain Markdown — no HTML, no inline styling, no scripts.
+
+Sort leads by score, highest first. Use this exact structure:
+
+````markdown
+# Antikode · Lead Radar — [Geography] BD Intelligence Report
+
+**Brief:** [Project type(s)] · [Size tier] · Manager to VP level · [Month Year]
+**Tags:** [Geography] · [Project type] · [Size] · Manager–VP PICs
+**Generated:** [YYYY-MM-DD]
+
+## Summary
+
+| Metric | Value |
+|---|---|
+| Total leads | [n] |
+| High priority (8–10) | [n] |
+| Medium priority (5–7) | [n] |
+| Average score | [x.x] |
+
+**Top 2 to contact first:** [Company A] ([score]), [Company B] ([score])
+
+---
+
+## 1. [Company Name] — Score: [X]/10 · [✓ Verified / ⚠ Unverified]
+
+**Website:** [url] · **Industry:** [industry] · **Size:** [size]
+**Why this score:** [scoreReason]
+
+### ◎ Score Rationale
+[fit — 2-3 sentences]
+
+### 🏢 Client / Outlet Portfolio
+No Loyalty: [n] · Lacking Loyalty: [n] · Full-scale Loyalty: [n]
+
+| Name | Loyalty Status | Provider |
+|---|---|---|
+| [name] | [status] | [provider or —] |
+| ... (10+ rows) | | |
+
+### ⚔ Competitor Landscape & Loyalty Schemes
+
+| Competitor | Loyalty Status | Scheme | Weakness |
+|---|---|---|---|
+| [name] | [status] | [scheme] | [weakness] |
+| ... (3-5 rows) | | | |
+
+### 👥 Decision Makers (PICs)
+- **[Name]** — [Title] [♂/♀] · [LinkedIn search]([linkedinUrl])
+  Approach: [approachAngle]
+- ... (2-4 PICs)
+
+### 🎯 Current Promotion Schemes
+- **[type]** — [description] · [source]([url])
+- ... (2-3 promos)
+
+### ◈ Value Proposition for Antikode
+[valueProp]
+
+### ◉ Outreach Strategy
+[outreachStrategy]
+
+### ✦ Conversation Starters
+> "[starter 1]"
+
+> "[starter 2]"
+
+### 🔗 Sources
+- [label]([url])
+- ... (4+ sources)
+
+---
+
+## 2. [Next Company] ...
+````
+
+### Rules for the Markdown output:
+- All 9 lead sections appear in the order above, for every lead.
+- Loyalty status counters in 3b must add up to the number of client rows.
+- Every PIC LinkedIn link and every promo source uses real Markdown link syntax `[text](url)`.
+- Conversation starters are blockquotes, one per line.
+- Separate each lead with a `---` rule.
+- No HTML tags anywhere. No `<div>`, no `<style>`, no emoji-only decoration that breaks plain-text readers.
+
+---
+
+## Step 5 — Present the File
+
+Tell the user the file path, then give a 3-line summary:
+- How many leads generated, score range
+- Top 2 leads recommended to contact first (with scores)
+- One reminder: "The report is plain Markdown — paste it into Lark Doc, Obsidian, or a deck as-is."
+
+---
+
+## Trigger Phrases
+
+This skill activates on any of:
+- "start the lead form"
+- "generate leads"
+- "run lead radar"
+- "find leads for antikode"
+- "lead research"
+- "show me the form"
+- "open the lead form"
+- "new lead research"
+
+On any of these triggers: go directly to Step 1. Do not ask for clarification first.
+
+---
+
+## Notes
+
+- Always use real, named companies — never placeholder names
+- Always web search before writing lead content — do not rely on training data alone
+- The credential PDF is the source of Antikode's proof points — if no PDF, use Antikode's known clients (HokBen, Maybank, AXIS, Paragon Corp, Tzu Chi Hospital) as reference
+- PIC photos are not scrapeable from LinkedIn — use the gender icon (♀/♂) plus a LinkedIn search URL instead
+- Flag outlet counts that fall outside the selected size tier with a note rather than excluding the lead
+- Verify every named company exists before including it — do not hallucinate company names
+- Output is always a single `.md` file — no HTML, no styling, no build step
